@@ -10,7 +10,6 @@
         
         textarea, input[type="number"], input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; }
         
-        /* 勾选人员区域样式 */
         .person-list { max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa; }
         .person-item { display: inline-block; width: 45%; margin-bottom: 8px; cursor: pointer; }
         .person-item input { width: auto; margin-right: 5px; cursor: pointer; }
@@ -27,7 +26,6 @@
         #result { margin-top: 20px; padding: 12px; background: #e9f7ef; border-left: 5px solid #28a745; border-radius: 4px; }
         #syncStatus { font-size: 12px; color: #6c757d; margin-top: 4px; }
 
-        /* 24小时抽奖历史记录样式 */
         .history-box { margin-top: 25px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fcfcfc; }
         .history-item { padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
         .history-item:last-child { border-bottom: none; }
@@ -65,7 +63,7 @@
     <!-- 3. 抽奖主题 -->
     <div class="input-group">
         <label for="lotteryTitle">3. 抽奖主题：</label>
-        <input type="text" id="lotteryTitle" value="幸运大抽奖" placeholder="请输入本次抽奖的主题（如：一等奖 / 午餐幸运奖）">
+        <input type="text" id="lotteryTitle" value="幸运大抽奖" placeholder="请输入本次抽奖的主题">
     </div>
 
     <!-- 4. 中奖名额 -->
@@ -81,9 +79,9 @@
 
     <!-- 24小时中奖记录区域 -->
     <div class="history-box">
-        <label>📜 24小时内抽奖历史记录：</label>
+        <label>📜 24小时内抽奖历史记录（云端同步）：</label>
         <div id="historyList">
-            <span style="color:#888; font-size: 13px;">暂无 24 小时内的抽奖记录</span>
+            <span style="color:#888; font-size: 13px;">加载云端历史记录中...</span>
         </div>
     </div>
 
@@ -93,31 +91,12 @@
         const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
         // ===========================================================================
 
-        // 默认保底 20 人名单
-        const DEFAULT_NAMES = `屁屁
-Kiya
-KS
-ming
-伯
-LIZ
-KK
-安娜
-LEO
-F
-小绿
-圈圈
-涵
-小燕子
-Amanda
-宝宝
-依依
-小莫
-豪
-Ryan`;
-
+        const DEFAULT_NAMES = `屁屁\nKiya\nKS\nming\n伯\nLIZ\nKK\n安娜\nLEO\nF\n小绿\n圈圈\n涵\n小燕子\nAmanda\n宝宝\n依依\n小莫\n豪\nRyan`;
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-        // 从云端加载名单及预设主题
+        let currentCloudData = { list: DEFAULT_NAMES, title: '幸运大抽奖', history: [] };
+
+        // 从云端加载完整数据（包含名单与全设备历史记录）
         async function loadFromCloud() {
             const statusDiv = document.getElementById('syncStatus');
             try {
@@ -127,37 +106,34 @@ Ryan`;
                 });
                 const data = await response.json();
                 
-                let listText = data.record && data.record.list ? data.record.list : DEFAULT_NAMES;
-                if (data.record && data.record.title) {
-                    document.getElementById('lotteryTitle').value = data.record.title;
+                if (data.record) {
+                    currentCloudData = {
+                        list: data.record.list || DEFAULT_NAMES,
+                        title: data.record.title || '幸运大抽奖',
+                        history: data.record.history || []
+                    };
                 }
-                
-                document.getElementById('customList').value = listText;
-                renderCheckboxes(listText);
+
+                document.getElementById('customList').value = currentCloudData.list;
+                document.getElementById('lotteryTitle').value = currentCloudData.title;
+                renderCheckboxes(currentCloudData.list);
+                renderHistory(currentCloudData.history);
+
                 statusDiv.innerText = "✅ 云端数据加载完成";
                 statusDiv.style.color = "#28a745";
             } catch (error) {
                 console.error(error);
                 document.getElementById('customList').value = DEFAULT_NAMES;
                 renderCheckboxes(DEFAULT_NAMES);
-                statusDiv.innerText = "⚠️ 离线模式（已自动加载 20 人默认名单）";
+                statusDiv.innerText = "⚠️ 离线模式（加载默认名单）";
                 statusDiv.style.color = "#ffc107";
             }
         }
 
-        // 保存名单与主题到云端
-        async function saveToCloud() {
-            const rawText = document.getElementById('customList').value.trim();
-            const titleText = document.getElementById('lotteryTitle').value.trim() || '幸运大抽奖';
+        // 保存更新到云端
+        async function updateCloudData(newData) {
+            currentCloudData = { ...currentCloudData, ...newData };
             const statusDiv = document.getElementById('syncStatus');
-            const saveBtn = document.getElementById('saveBtn');
-
-            if (!rawText) {
-                alert('请先输入名单！');
-                return;
-            }
-
-            saveBtn.disabled = true;
             statusDiv.innerText = "正在同步到云端...";
             statusDiv.style.color = "#007bff";
 
@@ -168,25 +144,33 @@ Ryan`;
                         'Content-Type': 'application/json',
                         'X-Master-Key': MASTER_KEY
                     },
-                    body: JSON.stringify({ list: rawText, title: titleText })
+                    body: JSON.stringify(currentCloudData)
                 });
 
                 if (response.ok) {
-                    renderCheckboxes(rawText);
-                    statusDiv.innerText = "✅ 保存成功！已同步至所有设备";
+                    statusDiv.innerText = "✅ 数据已云端同步";
                     statusDiv.style.color = "#28a745";
-                    alert('名单与主题设置已成功同步至所有设备！');
-                } else {
-                    throw new Error('网络响应异常');
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerText = "❌ 保存失败，请检查网络";
+                statusDiv.innerText = "❌ 同步失败";
                 statusDiv.style.color = "#dc3545";
-                alert('保存失败，请检查配置！');
-            } finally {
-                saveBtn.disabled = false;
             }
+        }
+
+        // 手动保存名单和主题
+        async function saveToCloud() {
+            const rawText = document.getElementById('customList').value.trim();
+            const titleText = document.getElementById('lotteryTitle').value.trim() || '幸运大抽奖';
+
+            if (!rawText) {
+                alert('请先输入名单！');
+                return;
+            }
+
+            renderCheckboxes(rawText);
+            await updateCloudData({ list: rawText, title: titleText });
+            alert('名单与主题已成功同步至所有设备！');
         }
 
         // 渲染勾选框列表
@@ -214,14 +198,14 @@ Ryan`;
             checkboxes.forEach(cb => cb.checked = status);
         }
 
-        // 获取10分钟窗口标识 (例: 2026-8-13-14-30 代表 14:30~14:39 窗口)
+        // 获取 10 分钟窗口标识
         function getCurrentSlotId() {
             const now = new Date();
             const slotIndex = Math.floor(now.getMinutes() / 10);
             return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${slotIndex}`;
         }
 
-        // 倒计时计算：获取距离下一个10分钟整点的剩余秒数
+        // 计算距离下一个 10 分钟整点的秒数
         function getSecondsUntilNextSlot() {
             const now = new Date();
             const minutes = now.getMinutes();
@@ -230,7 +214,7 @@ Ryan`;
             return (nextSlotMinute - minutes) * 60 - seconds;
         }
 
-        // 检查10分钟限制状态
+        // 检查状态
         function checkStatus() {
             const currentSlot = getCurrentSlotId();
             const lastDrawnSlot = localStorage.getItem('lastDrawnSlot');
@@ -247,46 +231,22 @@ Ryan`;
                 btn.disabled = false;
                 timerDiv.innerHTML = "✅ 当前 10 分钟时间段开放中，可以抽奖";
             }
-
-            renderHistory();
         }
 
-        // 保存新的抽奖日志（带主题）并自动过滤超过24小时的旧日志
-        function addHistoryRecord(title, winners) {
-            let history = JSON.parse(localStorage.getItem('lotteryHistory24h') || '[]');
-            const nowTimestamp = Date.now();
-            const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
-
-            history.unshift({
-                timestamp: nowTimestamp,
-                timeStr: timeString,
-                title: title,
-                winners: winners
-            });
-
-            const twentyFourHoursMs = 24 * 60 * 60 * 1000;
-            history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
-
-            localStorage.setItem('lotteryHistory24h', JSON.stringify(history));
-            renderHistory();
-        }
-
-        // 渲染 24 小时历史记录列表
-        function renderHistory() {
+        // 渲染 24 小时历史记录并过滤过期项
+        function renderHistory(historyArr) {
             const historyListDiv = document.getElementById('historyList');
-            let history = JSON.parse(localStorage.getItem('lotteryHistory24h') || '[]');
             const nowTimestamp = Date.now();
             const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
-            history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
-            localStorage.setItem('lotteryHistory24h', JSON.stringify(history));
+            const filteredHistory = (historyArr || []).filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
 
-            if (history.length === 0) {
+            if (filteredHistory.length === 0) {
                 historyListDiv.innerHTML = '<span style="color:#888; font-size: 13px;">暂无 24 小时内的抽奖记录</span>';
                 return;
             }
 
-            historyListDiv.innerHTML = history.map(item => `
+            historyListDiv.innerHTML = filteredHistory.map(item => `
                 <div class="history-item">
                     <div class="history-time">⏱️ 抽奖时间：${item.timeStr} | 🎯 主题：<b>${item.title || '幸运大抽奖'}</b></div>
                     <div>🎉 中奖名单：<strong>${item.winners.join('、')}</strong></div>
@@ -295,7 +255,7 @@ Ryan`;
         }
 
         // 核心抽奖逻辑
-        function drawWinners() {
+        async function drawWinners() {
             const checkboxes = document.querySelectorAll('.member-checkbox:checked');
             let participants = Array.from(checkboxes).map(cb => cb.value);
 
@@ -308,13 +268,8 @@ Ryan`;
                 return;
             }
 
-            if (isNaN(count) || count < 1) {
+            if (isNaN(count) || count < 1 || count > participants.length) {
                 alert('请输入有效的中奖名额！');
-                return;
-            }
-
-            if (count > participants.length) {
-                alert(`中奖名额 (${count}) 不能大于所选人数 (${participants.length})！`);
                 return;
             }
 
@@ -326,19 +281,33 @@ Ryan`;
 
             const winners = participants.slice(0, count);
 
-            // 显示中奖结果
+            // 显示本轮结果
             resultDiv.innerHTML = `<strong>🎉 【${title}】 中奖名单（共 ${count} 人）：</strong><br><br>` + 
                 winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
 
-            // 1. 记录抽奖主题、时间和中奖名单
-            addHistoryRecord(title, winners);
+            // 追加到历史记录并推送到云端
+            const nowTimestamp = Date.now();
+            const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
+            
+            const newRecord = {
+                timestamp: nowTimestamp,
+                timeStr: timeString,
+                title: title,
+                winners: winners
+            };
 
-            // 2. 记录已抽奖并锁定 10 分钟
+            const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+            const updatedHistory = [newRecord, ...(currentCloudData.history || [])].filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
+
+            renderHistory(updatedHistory);
+            await updateCloudData({ history: updatedHistory });
+
+            // 本地记录冷却锁定
             localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
             checkStatus();
         }
 
-        // 页面启动运行
+        // 启动运行
         loadFromCloud();
         setInterval(checkStatus, 1000);
         checkStatus();
