@@ -62,9 +62,15 @@
         </div>
     </div>
 
-    <!-- 3. 中奖名额 -->
+    <!-- 3. 抽奖主题 -->
     <div class="input-group">
-        <label for="winnerCount">3. 中奖名额：</label>
+        <label for="lotteryTitle">3. 抽奖主题（例如：一等奖 / 午餐幸运奖）：</label>
+        <input type="text" id="lotteryTitle" value="幸运大抽奖" placeholder="请输入本次抽奖的主题">
+    </div>
+
+    <!-- 4. 中奖名额 -->
+    <div class="input-group">
+        <label for="winnerCount">4. 中奖名额：</label>
         <input type="number" id="winnerCount" min="1" value="1">
     </div>
 
@@ -84,14 +90,12 @@
     <script>
         // ================= 【请把下面两个替换为您在 JSONBin 获取的值】 =================
         const BIN_ID = "6a7cf24dda38895dfedcb6bd";             // 例如: "66e01234abc123456789"
-        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6
-
-YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
+        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
         // ===========================================================================
 
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-        // 从云端加载名单
+        // 从云端加载名单及预设主题
         async function loadFromCloud() {
             const statusDiv = document.getElementById('syncStatus');
             try {
@@ -101,6 +105,9 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
                 });
                 const data = await response.json();
                 const listText = data.record.list || '';
+                if (data.record.title) {
+                    document.getElementById('lotteryTitle').value = data.record.title;
+                }
                 
                 document.getElementById('customList').value = listText;
                 renderCheckboxes(listText);
@@ -113,9 +120,10 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
             }
         }
 
-        // 保存名单到云端
+        // 保存名单与主题到云端
         async function saveToCloud() {
             const rawText = document.getElementById('customList').value.trim();
+            const titleText = document.getElementById('lotteryTitle').value.trim() || '幸运大抽奖';
             const statusDiv = document.getElementById('syncStatus');
             const saveBtn = document.getElementById('saveBtn');
 
@@ -135,14 +143,14 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
                         'Content-Type': 'application/json',
                         'X-Master-Key': MASTER_KEY
                     },
-                    body: JSON.stringify({ list: rawText })
+                    body: JSON.stringify({ list: rawText, title: titleText })
                 });
 
                 if (response.ok) {
                     renderCheckboxes(rawText);
                     statusDiv.innerText = "✅ 保存成功！已同步至所有设备";
                     statusDiv.style.color = "#28a745";
-                    alert('名单已成功同步至所有设备！');
+                    alert('名单与设置已成功同步至所有设备！');
                 } else {
                     throw new Error('网络响应异常');
                 }
@@ -215,24 +223,22 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
                 timerDiv.innerHTML = "✅ 当前半小时窗口开放中，可以抽奖";
             }
 
-            // 定时刷新并清理过期的 24 小时历史记录
             renderHistory();
         }
 
-        // 保存新的抽奖日志并自动过滤超过24小时的旧日志
-        function addHistoryRecord(winners) {
+        // 保存新的抽奖日志（带主题）并自动过滤超过24小时的旧日志
+        function addHistoryRecord(title, winners) {
             let history = JSON.parse(localStorage.getItem('lotteryHistory24h') || '[]');
             const nowTimestamp = Date.now();
             const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
 
-            // 增加新记录
             history.unshift({
                 timestamp: nowTimestamp,
                 timeStr: timeString,
+                title: title,
                 winners: winners
             });
 
-            // 过滤掉超过24小时（24 * 60 * 60 * 1000 毫秒）的记录
             const twentyFourHoursMs = 24 * 60 * 60 * 1000;
             history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
 
@@ -247,7 +253,6 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
             const nowTimestamp = Date.now();
             const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
-            // 清理超过24小时的过期记录
             history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
             localStorage.setItem('lotteryHistory24h', JSON.stringify(history));
 
@@ -256,9 +261,9 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
                 return;
             }
 
-            historyListDiv.innerHTML = history.map((item, idx) => `
+            historyListDiv.innerHTML = history.map(item => `
                 <div class="history-item">
-                    <div class="history-time">⏱️ 抽奖时间：${item.timeStr}</div>
+                    <div class="history-time">⏱️ 抽奖时间：${item.timeStr} | 🎯 主题：<b>${item.title || '幸运大抽奖'}</b></div>
                     <div>🎉 中奖名单：<strong>${item.winners.join('、')}</strong></div>
                 </div>
             `).join('');
@@ -269,6 +274,7 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
             const checkboxes = document.querySelectorAll('.member-checkbox:checked');
             let participants = Array.from(checkboxes).map(cb => cb.value);
 
+            const title = document.getElementById('lotteryTitle').value.trim() || '幸运大抽奖';
             const count = parseInt(document.getElementById('winnerCount').value, 10);
             const resultDiv = document.getElementById('result');
 
@@ -296,11 +302,11 @@ YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
             const winners = participants.slice(0, count);
 
             // 显示中奖结果
-            resultDiv.innerHTML = `<strong>🎉 本轮中奖名单（共 ${count} 人）：</strong><br><br>` + 
+            resultDiv.innerHTML = `<strong>🎉 【${title}】 中奖名单（共 ${count} 人）：</strong><br><br>` + 
                 winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
 
-            // 1. 记录抽奖时间和中奖名单（保存并自动过滤24小时内的记录）
-            addHistoryRecord(winners);
+            // 1. 记录抽奖主题、时间和中奖名单
+            addHistoryRecord(title, winners);
 
             // 2. 记录已抽奖并锁定半小时
             localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
