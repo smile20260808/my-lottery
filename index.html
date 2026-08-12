@@ -26,6 +26,12 @@
         #timer { font-weight: bold; color: #dc3545; margin-top: 10px; text-align: center; }
         #result { margin-top: 20px; padding: 12px; background: #e9f7ef; border-left: 5px solid #28a745; border-radius: 4px; }
         #syncStatus { font-size: 12px; color: #6c757d; margin-top: 4px; }
+
+        /* 24小时抽奖历史记录样式 */
+        .history-box { margin-top: 25px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fcfcfc; }
+        .history-item { padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
+        .history-item:last-child { border-bottom: none; }
+        .history-time { font-size: 12px; color: #888; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -67,10 +73,20 @@
     <div id="timer"></div>
     <div id="result"></div>
 
+    <!-- 24小时中奖记录区域 -->
+    <div class="history-box">
+        <label>📜 24小时内抽奖历史记录：</label>
+        <div id="historyList">
+            <span style="color:#888; font-size: 13px;">暂无 24 小时内的抽奖记录</span>
+        </div>
+    </div>
+
     <script>
         // ================= 【请把下面两个替换为您在 JSONBin 获取的值】 =================
         const BIN_ID = "6a7cf24dda38895dfedcb6bd";             // 例如: "66e01234abc123456789"
-        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
+        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6
+
+YOUR_MASTER_K";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
         // ===========================================================================
 
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
@@ -198,6 +214,54 @@
                 btn.disabled = false;
                 timerDiv.innerHTML = "✅ 当前半小时窗口开放中，可以抽奖";
             }
+
+            // 定时刷新并清理过期的 24 小时历史记录
+            renderHistory();
+        }
+
+        // 保存新的抽奖日志并自动过滤超过24小时的旧日志
+        function addHistoryRecord(winners) {
+            let history = JSON.parse(localStorage.getItem('lotteryHistory24h') || '[]');
+            const nowTimestamp = Date.now();
+            const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
+
+            // 增加新记录
+            history.unshift({
+                timestamp: nowTimestamp,
+                timeStr: timeString,
+                winners: winners
+            });
+
+            // 过滤掉超过24小时（24 * 60 * 60 * 1000 毫秒）的记录
+            const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+            history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
+
+            localStorage.setItem('lotteryHistory24h', JSON.stringify(history));
+            renderHistory();
+        }
+
+        // 渲染 24 小时历史记录列表
+        function renderHistory() {
+            const historyListDiv = document.getElementById('historyList');
+            let history = JSON.parse(localStorage.getItem('lotteryHistory24h') || '[]');
+            const nowTimestamp = Date.now();
+            const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+
+            // 清理超过24小时的过期记录
+            history = history.filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
+            localStorage.setItem('lotteryHistory24h', JSON.stringify(history));
+
+            if (history.length === 0) {
+                historyListDiv.innerHTML = '<span style="color:#888; font-size: 13px;">暂无 24 小时内的抽奖记录</span>';
+                return;
+            }
+
+            historyListDiv.innerHTML = history.map((item, idx) => `
+                <div class="history-item">
+                    <div class="history-time">⏱️ 抽奖时间：${item.timeStr}</div>
+                    <div>🎉 中奖名单：<strong>${item.winners.join('、')}</strong></div>
+                </div>
+            `).join('');
         }
 
         // 核心抽奖逻辑
@@ -235,7 +299,10 @@
             resultDiv.innerHTML = `<strong>🎉 本轮中奖名单（共 ${count} 人）：</strong><br><br>` + 
                 winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
 
-            // 记录已抽奖并锁定
+            // 1. 记录抽奖时间和中奖名单（保存并自动过滤24小时内的记录）
+            addHistoryRecord(winners);
+
+            // 2. 记录已抽奖并锁定半小时
             localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
             checkStatus();
         }
