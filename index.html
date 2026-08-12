@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>自定义名单限时抽奖系统</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 550px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        
+        textarea, input[type="number"], input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; }
+        
+        /* 勾选人员区域样式 */
+        .person-list { max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa; }
+        .person-item { display: inline-block; width: 45%; margin-bottom: 8px; cursor: pointer; }
+        .person-item input { width: auto; margin-right: 5px; cursor: pointer; }
+        
+        .action-btns { margin: 8px 0; }
+        .action-btns button, .update-btn { width: auto; padding: 6px 12px; font-size: 13px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .action-btns button:hover, .update-btn:hover { background: #5a6268; }
+        
+        .draw-btn { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        .draw-btn:hover { background: #218838; }
+        .draw-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        
+        #timer { font-weight: bold; color: #dc3545; margin-top: 10px; text-align: center; }
+        #result { margin-top: 20px; padding: 12px; background: #e9f7ef; border-left: 5px solid #28a745; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h2>自定义名单限时抽奖系统</h2>
+
+    <!-- 1. 录入固定名单 -->
+    <div class="input-group">
+        <label for="customList">1. 设置/修改固定总名单（每行一个名字）：</label>
+        <textarea id="customList" rows="4" placeholder="在此粘贴或输入名字，例如：&#10;张三&#10;李四&#10;王五"></textarea>
+        <div style="margin-top: 5px; text-align: right;">
+            <button class="update-btn" onclick="saveAndRenderList()">保存并更新选人列表</button>
+        </div>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+    <!-- 2. 选择参抽人员 -->
+    <div class="input-group">
+        <label>2. 选择本次参加抽奖的人员：</label>
+        <div class="action-btns">
+            <button onclick="selectAll(true)">全选</button>
+            <button onclick="selectAll(false)">全不选</button>
+        </div>
+        <div class="person-list" id="personContainer">
+            <span style="color:#888;">请先在上方输入名单并点击“保存并更新”</span>
+        </div>
+    </div>
+
+    <!-- 3. 中奖名额 -->
+    <div class="input-group">
+        <label for="winnerCount">3. 中奖名额：</label>
+        <input type="number" id="winnerCount" min="1" value="1">
+    </div>
+
+    <!-- 抽奖按钮与状态提示 -->
+    <button class="draw-btn" id="drawBtn" onclick="drawWinners()">开始抽奖</button>
+    <div id="timer"></div>
+    <div id="result"></div>
+
+    <script>
+        // 页面初始化：读取保存的名单
+        function initData() {
+            const savedList = localStorage.getItem('myCustomMemberList');
+            if (savedList) {
+                document.getElementById('customList').value = savedList;
+                renderCheckboxes(savedList);
+            }
+        }
+
+        // 保存名单并生成勾选框
+        function saveAndRenderList() {
+            const rawText = document.getElementById('customList').value.trim();
+            if (!rawText) {
+                alert('请先输入名单！');
+                return;
+            }
+            // 保存到本地存储
+            localStorage.setItem('myCustomMemberList', rawText);
+            renderCheckboxes(rawText);
+            alert('名单更新并保存成功！');
+        }
+
+        // 渲染勾选框列表
+        function renderCheckboxes(rawText) {
+            const members = rawText.split('\n').map(name => name.trim()).filter(name => name !== '');
+            const container = document.getElementById('personContainer');
+            container.innerHTML = '';
+
+            if (members.length === 0) {
+                container.innerHTML = '<span style="color:#888;">没有有效的名单输入</span>';
+                return;
+            }
+
+            members.forEach(name => {
+                const itemDiv = document.createElement('label');
+                itemDiv.className = 'person-item';
+                itemDiv.innerHTML = `<input type="checkbox" class="member-checkbox" value="${name}" checked> ${name}`;
+                container.appendChild(itemDiv);
+            });
+        }
+
+        // 全选 / 全不选
+        function selectAll(status) {
+            const checkboxes = document.querySelectorAll('.member-checkbox');
+            checkboxes.forEach(cb => cb.checked = status);
+        }
+
+        // 获取半小时窗口标识 (例: 2026-8-13-14-0)
+        function getCurrentSlotId() {
+            const now = new Date();
+            const slot = now.getMinutes() < 30 ? 0 : 1;
+            return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${slot}`;
+        }
+
+        // 倒计时计算
+        function getSecondsUntilNextSlot() {
+            const now = new Date();
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            const targetMinutes = minutes < 30 ? 30 : 60;
+            return (targetMinutes - minutes) * 60 - seconds;
+        }
+
+        // 检查半小时限制状态
+        function checkStatus() {
+            const currentSlot = getCurrentSlotId();
+            const lastDrawnSlot = localStorage.getItem('lastDrawnSlot');
+            const btn = document.getElementById('drawBtn');
+            const timerDiv = document.getElementById('timer');
+
+            if (lastDrawnSlot === currentSlot) {
+                btn.disabled = true;
+                const remainingSeconds = getSecondsUntilNextSlot();
+                const m = Math.floor(remainingSeconds / 60);
+                const s = remainingSeconds % 60;
+                timerDiv.innerHTML = `⚠️ 本半小时已抽奖，下次开放还剩：${m} 分 ${s < 10 ? '0' : ''}${s} 秒`;
+            } else {
+                btn.disabled = false;
+                timerDiv.innerHTML = "✅ 当前半小时窗口开放中，可以抽奖";
+            }
+        }
+
+        // 核心抽奖逻辑
+        function drawWinners() {
+            const checkboxes = document.querySelectorAll('.member-checkbox:checked');
+            let participants = Array.from(checkboxes).map(cb => cb.value);
+
+            const count = parseInt(document.getElementById('winnerCount').value, 10);
+            const resultDiv = document.getElementById('result');
+
+            if (participants.length === 0) {
+                alert('请至少勾选一位参抽人员！');
+                return;
+            }
+
+            if (isNaN(count) || count < 1) {
+                alert('请输入有效的中奖名额！');
+                return;
+            }
+
+            if (count > participants.length) {
+                alert(`中奖名额 (${count}) 不能大于所选人数 (${participants.length})！`);
+                return;
+            }
+
+            // 洗牌算法
+            for (let i = participants.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [participants[i], participants[j]] = [participants[j], participants[i]];
+            }
+
+            const winners = participants.slice(0, count);
+
+            // 显示中奖结果
+            resultDiv.innerHTML = `<strong>🎉 本轮中奖名单（共 ${count} 人）：</strong><br><br>` + 
+                winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
+
+            // 记录已抽奖并锁定
+            localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
+            checkStatus();
+        }
+
+        // 页面启动运行
+        initData();
+        setInterval(checkStatus, 1000);
+        checkStatus();
+    </script>
+
+</body>
+</html>
