@@ -43,7 +43,7 @@
         <label for="customList">1. 设置/修改固定总名单（每行一个名字）：</label>
         <textarea id="customList" rows="6" placeholder="在此粘贴或输入名字..."></textarea>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-            <span id="syncStatus">正在加载云端名单...</span>
+            <span id="syncStatus">正在同步云端数据...</span>
             <button class="update-btn" id="saveBtn" onclick="saveToCloud()">保存并同步到所有设备</button>
         </div>
     </div>
@@ -58,14 +58,14 @@
             <button onclick="selectAll(false)">全不选</button>
         </div>
         <div class="person-list" id="personContainer">
-            <span style="color:#888;">数据同步中...</span>
+            <span style="color:#888;">加载中...</span>
         </div>
     </div>
 
     <!-- 3. 抽奖主题 -->
     <div class="input-group">
-        <label for="lotteryTitle">3. 抽奖主题（例如：一等奖 / 午餐幸运奖）：</label>
-        <input type="text" id="lotteryTitle" value="幸运大抽奖" placeholder="请输入本次抽奖的主题">
+        <label for="lotteryTitle">3. 抽奖主题：</label>
+        <input type="text" id="lotteryTitle" value="幸运大抽奖" placeholder="请输入本次抽奖的主题（如：一等奖 / 午餐幸运奖）">
     </div>
 
     <!-- 4. 中奖名额 -->
@@ -93,6 +93,28 @@
         const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
         // ===========================================================================
 
+        // 默认保底 20 人名单
+        const DEFAULT_NAMES = `屁屁
+Kiya
+KS
+ming
+伯
+LIZ
+KK
+安娜
+LEO
+F
+小绿
+圈圈
+涵
+小燕子
+Amanda
+宝宝
+依依
+小莫
+豪
+Ryan`;
+
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
         // 从云端加载名单及预设主题
@@ -104,8 +126,9 @@
                     headers: { 'X-Master-Key': MASTER_KEY }
                 });
                 const data = await response.json();
-                const listText = data.record.list || '';
-                if (data.record.title) {
+                
+                let listText = data.record && data.record.list ? data.record.list : DEFAULT_NAMES;
+                if (data.record && data.record.title) {
                     document.getElementById('lotteryTitle').value = data.record.title;
                 }
                 
@@ -115,8 +138,11 @@
                 statusDiv.style.color = "#28a745";
             } catch (error) {
                 console.error(error);
-                statusDiv.innerText = "❌ 加载失败，请检查网络或密钥设置";
-                statusDiv.style.color = "#dc3545";
+                // 连不上云端时自动使用保底 20 人名单
+                document.getElementById('customList').value = DEFAULT_NAMES;
+                renderCheckboxes(DEFAULT_NAMES);
+                statusDiv.innerText = "⚠️ 离线模式（已自动加载 20 人默认名单）";
+                statusDiv.style.color = "#ffc107";
             }
         }
 
@@ -150,13 +176,13 @@
                     renderCheckboxes(rawText);
                     statusDiv.innerText = "✅ 保存成功！已同步至所有设备";
                     statusDiv.style.color = "#28a745";
-                    alert('名单与设置已成功同步至所有设备！');
+                    alert('名单与主题设置已成功同步至所有设备！');
                 } else {
                     throw new Error('网络响应异常');
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerText = "❌ 保存失败，请重试";
+                statusDiv.innerText = "❌ 保存失败，请检查网络";
                 statusDiv.style.color = "#dc3545";
                 alert('保存失败，请检查配置！');
             } finally {
