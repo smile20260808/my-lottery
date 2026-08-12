@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>自定义名单限时抽奖系统</title>
+    <title>云端同步限时抽奖系统</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 550px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .input-group { margin-bottom: 15px; }
@@ -16,8 +16,8 @@
         .person-item input { width: auto; margin-right: 5px; cursor: pointer; }
         
         .action-btns { margin: 8px 0; }
-        .action-btns button, .update-btn { width: auto; padding: 6px 12px; font-size: 13px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .action-btns button:hover, .update-btn:hover { background: #5a6268; }
+        .action-btns button, .update-btn { width: auto; padding: 6px 12px; font-size: 13px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .action-btns button:hover, .update-btn:hover { background: #0056b3; }
         
         .draw-btn { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 10px; }
         .draw-btn:hover { background: #218838; }
@@ -25,18 +25,20 @@
         
         #timer { font-weight: bold; color: #dc3545; margin-top: 10px; text-align: center; }
         #result { margin-top: 20px; padding: 12px; background: #e9f7ef; border-left: 5px solid #28a745; border-radius: 4px; }
+        #syncStatus { font-size: 12px; color: #6c757d; margin-top: 4px; }
     </style>
 </head>
 <body>
 
-    <h2>自定义名单限时抽奖系统</h2>
+    <h2>云端同步限时抽奖系统</h2>
 
     <!-- 1. 录入固定名单 -->
     <div class="input-group">
         <label for="customList">1. 设置/修改固定总名单（每行一个名字）：</label>
-        <textarea id="customList" rows="4" placeholder="在此粘贴或输入名字，例如：&#10;张三&#10;李四&#10;王五"></textarea>
-        <div style="margin-top: 5px; text-align: right;">
-            <button class="update-btn" onclick="saveAndRenderList()">保存并更新选人列表</button>
+        <textarea id="customList" rows="6" placeholder="在此粘贴或输入名字..."></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+            <span id="syncStatus">正在加载云端名单...</span>
+            <button class="update-btn" id="saveBtn" onclick="saveToCloud()">保存并同步到所有设备</button>
         </div>
     </div>
 
@@ -50,7 +52,7 @@
             <button onclick="selectAll(false)">全不选</button>
         </div>
         <div class="person-list" id="personContainer">
-            <span style="color:#888;">请先在上方输入名单并点击“保存并更新”</span>
+            <span style="color:#888;">数据同步中...</span>
         </div>
     </div>
 
@@ -66,26 +68,76 @@
     <div id="result"></div>
 
     <script>
-        // 页面初始化：读取保存的名单
-        function initData() {
-            const savedList = localStorage.getItem('myCustomMemberList');
-            if (savedList) {
-                document.getElementById('customList').value = savedList;
-                renderCheckboxes(savedList);
+        // ================= 【请把下面两个替换为您在 JSONBin 获取的值】 =================
+        const BIN_ID = "6a7cf24dda38895dfedcb6bd";             // 例如: "66e01234abc123456789"
+        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
+        // ===========================================================================
+
+        const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+        // 从云端加载名单
+        async function loadFromCloud() {
+            const statusDiv = document.getElementById('syncStatus');
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    headers: { 'X-Master-Key': MASTER_KEY }
+                });
+                const data = await response.json();
+                const listText = data.record.list || '';
+                
+                document.getElementById('customList').value = listText;
+                renderCheckboxes(listText);
+                statusDiv.innerText = "✅ 云端数据加载完成";
+                statusDiv.style.color = "#28a745";
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "❌ 加载失败，请检查网络或密钥设置";
+                statusDiv.style.color = "#dc3545";
             }
         }
 
-        // 保存名单并生成勾选框
-        function saveAndRenderList() {
+        // 保存名单到云端
+        async function saveToCloud() {
             const rawText = document.getElementById('customList').value.trim();
+            const statusDiv = document.getElementById('syncStatus');
+            const saveBtn = document.getElementById('saveBtn');
+
             if (!rawText) {
                 alert('请先输入名单！');
                 return;
             }
-            // 保存到本地存储
-            localStorage.setItem('myCustomMemberList', rawText);
-            renderCheckboxes(rawText);
-            alert('名单更新并保存成功！');
+
+            saveBtn.disabled = true;
+            statusDiv.innerText = "正在同步到云端...";
+            statusDiv.style.color = "#007bff";
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': MASTER_KEY
+                    },
+                    body: JSON.stringify({ list: rawText })
+                });
+
+                if (response.ok) {
+                    renderCheckboxes(rawText);
+                    statusDiv.innerText = "✅ 保存成功！已同步至所有设备";
+                    statusDiv.style.color = "#28a745";
+                    alert('名单已成功同步至所有设备！');
+                } else {
+                    throw new Error('网络响应异常');
+                }
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "❌ 保存失败，请重试";
+                statusDiv.style.color = "#dc3545";
+                alert('保存失败，请检查配置！');
+            } finally {
+                saveBtn.disabled = false;
+            }
         }
 
         // 渲染勾选框列表
@@ -189,7 +241,7 @@
         }
 
         // 页面启动运行
-        initData();
+        loadFromCloud();
         setInterval(checkStatus, 1000);
         checkStatus();
     </script>
