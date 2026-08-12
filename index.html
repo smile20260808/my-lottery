@@ -138,7 +138,6 @@ Ryan`;
                 statusDiv.style.color = "#28a745";
             } catch (error) {
                 console.error(error);
-                // 连不上云端时自动使用保底 20 人名单
                 document.getElementById('customList').value = DEFAULT_NAMES;
                 renderCheckboxes(DEFAULT_NAMES);
                 statusDiv.innerText = "⚠️ 离线模式（已自动加载 20 人默认名单）";
@@ -215,23 +214,23 @@ Ryan`;
             checkboxes.forEach(cb => cb.checked = status);
         }
 
-        // 获取半小时窗口标识 (例: 2026-8-13-14-0)
+        // 获取10分钟窗口标识 (例: 2026-8-13-14-30 代表 14:30~14:39 窗口)
         function getCurrentSlotId() {
             const now = new Date();
-            const slot = now.getMinutes() < 30 ? 0 : 1;
-            return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${slot}`;
+            const slotIndex = Math.floor(now.getMinutes() / 10);
+            return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${slotIndex}`;
         }
 
-        // 倒计时计算
+        // 倒计时计算：获取距离下一个10分钟整点的剩余秒数
         function getSecondsUntilNextSlot() {
             const now = new Date();
             const minutes = now.getMinutes();
             const seconds = now.getSeconds();
-            const targetMinutes = minutes < 30 ? 30 : 60;
-            return (targetMinutes - minutes) * 60 - seconds;
+            const nextSlotMinute = (Math.floor(minutes / 10) + 1) * 10;
+            return (nextSlotMinute - minutes) * 60 - seconds;
         }
 
-        // 检查半小时限制状态
+        // 检查10分钟限制状态
         function checkStatus() {
             const currentSlot = getCurrentSlotId();
             const lastDrawnSlot = localStorage.getItem('lastDrawnSlot');
@@ -243,10 +242,10 @@ Ryan`;
                 const remainingSeconds = getSecondsUntilNextSlot();
                 const m = Math.floor(remainingSeconds / 60);
                 const s = remainingSeconds % 60;
-                timerDiv.innerHTML = `⚠️ 本半小时已抽奖，下次开放还剩：${m} 分 ${s < 10 ? '0' : ''}${s} 秒`;
+                timerDiv.innerHTML = `⚠️ 本 10 分钟段已抽奖，下次开放还剩：${m} 分 ${s < 10 ? '0' : ''}${s} 秒`;
             } else {
                 btn.disabled = false;
-                timerDiv.innerHTML = "✅ 当前半小时窗口开放中，可以抽奖";
+                timerDiv.innerHTML = "✅ 当前 10 分钟时间段开放中，可以抽奖";
             }
 
             renderHistory();
@@ -334,7 +333,7 @@ Ryan`;
             // 1. 记录抽奖主题、时间和中奖名单
             addHistoryRecord(title, winners);
 
-            // 2. 记录已抽奖并锁定半小时
+            // 2. 记录已抽奖并锁定 10 分钟
             localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
             checkStatus();
         }
