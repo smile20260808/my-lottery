@@ -103,17 +103,20 @@
         async function loadFromCloud() {
             const statusDiv = document.getElementById('syncStatus');
             try {
-                const response = await fetch(API_URL, {
+                const response = await fetch(`${API_URL}/latest`, {
                     method: 'GET',
-                    headers: { 'X-Master-Key': MASTER_KEY }
+                    headers: { 
+                        'X-Master-Key': MASTER_KEY,
+                        'X-Bin-Meta': 'false'
+                    }
                 });
                 const data = await response.json();
                 
-                if (data.record) {
+                if (data) {
                     currentCloudData = {
-                        list: data.record.list || DEFAULT_NAMES,
-                        title: data.record.title || '幸运大抽奖',
-                        history: data.record.history || []
+                        list: data.list || DEFAULT_NAMES,
+                        title: data.title || '幸运大抽奖',
+                        history: data.history || []
                     };
                 }
 
@@ -128,7 +131,7 @@
                 console.error(error);
                 document.getElementById('customList').value = DEFAULT_NAMES;
                 renderCheckboxes(DEFAULT_NAMES);
-                statusDiv.innerText = "⚠️ 离线模式（加载默认名单）";
+                statusDiv.innerText = "⚠️ 离线模式（已自动加载默认名单）";
                 statusDiv.style.color = "#ffc107";
             }
         }
@@ -156,7 +159,7 @@
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerText = "❌ 同步失败";
+                statusDiv.innerText = "❌ 云端同步失败";
                 statusDiv.style.color = "#dc3545";
             }
         }
