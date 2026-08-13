@@ -82,7 +82,7 @@
 
     <!-- 24小时中奖记录区域 -->
     <div class="history-box">
-        <label>📜 24小时内抽奖历史记录（云端同步）：</label>
+        <label>📜 24小时内抽奖历史记录（全端同步）：</label>
         <div id="historyList">
             <span style="color:#888; font-size: 13px;">加载云端历史记录中...</span>
         </div>
@@ -97,7 +97,7 @@
         const DEFAULT_NAMES = `屁屁\nKiya\nKS\nming\n伯\nLIZ\nKK\n安娜\nLEO\nF\n小绿\n圈圈\n涵\n小燕子\nAmanda\n宝宝\n依依\n小莫\n豪\nRyan`;
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-        let currentCloudData = { list: DEFAULT_NAMES, title: '幸运大抽奖', history: [] };
+        let currentCloudData = { list: DEFAULT_NAMES, title: '幸运大抽奖', history: [], lastDrawnSlot: "" };
 
         // 从云端加载完整数据
         async function loadFromCloud() {
@@ -116,7 +116,8 @@
                     currentCloudData = {
                         list: data.list || DEFAULT_NAMES,
                         title: data.title || '幸运大抽奖',
-                        history: data.history || []
+                        history: data.history || [],
+                        lastDrawnSlot: data.lastDrawnSlot || ""
                     };
                 }
 
@@ -204,32 +205,37 @@
             checkboxes.forEach(cb => cb.checked = status);
         }
 
-        // 获取 10 分钟窗口标识
-        function getCurrentSlotId() {
+        // 基于标准 UTC 时间计算 10 分钟整点窗口 ID (如: "2026-08-13-13-2" 代表统一时间片)
+        function getCurrentUtcSlotId() {
             const now = new Date();
-            const slotIndex = Math.floor(now.getMinutes() / 10);
-            return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${slotIndex}`;
+            const utcYear = now.getUTCFullYear();
+            const utcMonth = now.getUTCMonth() + 1;
+            const utcDate = now.getUTCDate();
+            const utcHours = now.getUTCHours();
+            const utcMinutes = now.getUTCMinutes();
+            const slotIndex = Math.floor(utcMinutes / 10);
+            return `${utcYear}-${utcMonth}-${utcDate}-${utcHours}-${slotIndex}`;
         }
 
-        // 计算距离下一个 10 分钟整点的秒数
-        function getSecondsUntilNextSlot() {
+        // 基于标准 UTC 时间计算统一倒计时秒数
+        function getUtcSecondsUntilNextSlot() {
             const now = new Date();
-            const minutes = now.getMinutes();
-            const seconds = now.getSeconds();
-            const nextSlotMinute = (Math.floor(minutes / 10) + 1) * 10;
-            return (nextSlotMinute - minutes) * 60 - seconds;
+            const utcMinutes = now.getUTCMinutes();
+            const utcSeconds = now.getUTCSeconds();
+            const nextSlotMinute = (Math.floor(utcMinutes / 10) + 1) * 10;
+            return (nextSlotMinute - utcMinutes) * 60 - utcSeconds;
         }
 
-        // 检查状态
+        // 检查状态并更新倒计时（全网统一）
         function checkStatus() {
-            const currentSlot = getCurrentSlotId();
-            const lastDrawnSlot = localStorage.getItem('lastDrawnSlot');
+            const currentSlot = getCurrentUtcSlotId();
+            const lastDrawnSlot = currentCloudData.lastDrawnSlot || localStorage.getItem('lastDrawnSlot');
             const btn = document.getElementById('drawBtn');
             const timerDiv = document.getElementById('timer');
 
             if (lastDrawnSlot === currentSlot) {
                 btn.disabled = true;
-                const remainingSeconds = getSecondsUntilNextSlot();
+                const remainingSeconds = getUtcSecondsUntilNextSlot();
                 const m = Math.floor(remainingSeconds / 60);
                 const s = remainingSeconds % 60;
                 timerDiv.innerHTML = `⚠️ 本 10 分钟段已抽奖，下次开放还剩：${m} 分 ${s < 10 ? '0' : ''}${s} 秒`;
@@ -292,15 +298,16 @@
             resultDiv.innerHTML = `<strong>🎉 【${title}】 中奖名单（共 ${count} 人）：</strong><br><br>` + 
                 winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
 
-            // 追加到历史记录（记录参抽名单 + 中奖名单）并推送到云端
+            // 追加到历史记录与云端抽奖锁槽位
             const nowTimestamp = Date.now();
             const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
+            const currentSlot = getCurrentUtcSlotId();
             
             const newRecord = {
                 timestamp: nowTimestamp,
                 timeStr: timeString,
                 title: title,
-                participants: Array.from(checkboxes).map(cb => cb.value), // 记录选中的参抽名单
+                participants: Array.from(checkboxes).map(cb => cb.value),
                 winners: winners
             };
 
@@ -308,10 +315,11 @@
             const updatedHistory = [newRecord, ...(currentCloudData.history || [])].filter(item => (nowTimestamp - item.timestamp) < twentyFourHoursMs);
 
             renderHistory(updatedHistory);
-            await updateCloudData({ history: updatedHistory });
+            
+            // 本地与云端同时锁定该时间段
+            localStorage.setItem('lastDrawnSlot', currentSlot);
+            await updateCloudData({ history: updatedHistory, lastDrawnSlot: currentSlot });
 
-            // 本地记录冷却锁定
-            localStorage.setItem('lastDrawnSlot', getCurrentSlotId());
             checkStatus();
         }
 
