@@ -4,15 +4,16 @@
     <meta charset="UTF-8">
     <title>云端同步限时抽奖系统</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 550px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .input-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
         
         textarea, input[type="number"], input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; }
         
-        .person-list { max-height: 180px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #fafafa; }
-        .person-item { display: inline-block; width: 45%; margin-bottom: 8px; cursor: pointer; }
-        .person-item input { width: auto; margin-right: 5px; cursor: pointer; }
+        /* 勾选人员区域样式：一排5个，无滚动条 */
+        .person-list { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; border: 1px solid #ddd; padding: 12px; border-radius: 4px; background: #fafafa; }
+        .person-item { display: flex; align-items: center; cursor: pointer; font-size: 14px; word-break: break-all; }
+        .person-item input { width: auto; margin-right: 6px; cursor: pointer; }
         
         .action-btns { margin: 8px 0; }
         .action-btns button, .update-btn { width: auto; padding: 6px 12px; font-size: 13px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
@@ -26,10 +27,12 @@
         #result { margin-top: 20px; padding: 12px; background: #e9f7ef; border-left: 5px solid #28a745; border-radius: 4px; }
         #syncStatus { font-size: 12px; color: #6c757d; margin-top: 4px; }
 
+        /* 24小时抽奖历史记录样式 */
         .history-box { margin-top: 25px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fcfcfc; }
-        .history-item { padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
+        .history-item { padding: 10px 0; border-bottom: 1px dashed #eee; font-size: 14px; line-height: 1.6; }
         .history-item:last-child { border-bottom: none; }
-        .history-time { font-size: 12px; color: #888; font-weight: bold; }
+        .history-time { font-size: 12px; color: #666; font-weight: bold; margin-bottom: 4px; }
+        .history-detail { font-size: 13px; color: #333; }
     </style>
 </head>
 <body>
@@ -56,7 +59,7 @@
             <button onclick="selectAll(false)">全不选</button>
         </div>
         <div class="person-list" id="personContainer">
-            <span style="color:#888;">加载中...</span>
+            <span style="color:#888; grid-column: span 5;">加载中...</span>
         </div>
     </div>
 
@@ -87,8 +90,8 @@
 
     <script>
         // ================= 【请把下面两个替换为您在 JSONBin 获取的值】 =================
-        const BIN_ID = "6a7cf24dda38895dfedcb6bd";             // 例如: "66e01234abc123456789"
-        const MASTER_KEY = "$2a$10$HI66QgowV7lxqL6KIAHHKeikbGO1ra8OgiFxkb6sfly.Z8gAhEtL6";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
+        const BIN_ID = "YOUR_BIN_ID";             // 例如: "66e01234abc123456789"
+        const MASTER_KEY = "YOUR_MASTER_KEY";     // 例如: "$2a$10$abcdefghijklmnopqrstuvwxyz"
         // ===========================================================================
 
         const DEFAULT_NAMES = `屁屁\nKiya\nKS\nming\n伯\nLIZ\nKK\n安娜\nLEO\nF\n小绿\n圈圈\n涵\n小燕子\nAmanda\n宝宝\n依依\n小莫\n豪\nRyan`;
@@ -96,7 +99,7 @@
 
         let currentCloudData = { list: DEFAULT_NAMES, title: '幸运大抽奖', history: [] };
 
-        // 从云端加载完整数据（包含名单与全设备历史记录）
+        // 从云端加载完整数据
         async function loadFromCloud() {
             const statusDiv = document.getElementById('syncStatus');
             try {
@@ -173,14 +176,14 @@
             alert('名单与主题已成功同步至所有设备！');
         }
 
-        // 渲染勾选框列表
+        // 渲染勾选框列表（一排5列）
         function renderCheckboxes(rawText) {
             const members = rawText.split('\n').map(name => name.trim()).filter(name => name !== '');
             const container = document.getElementById('personContainer');
             container.innerHTML = '';
 
             if (members.length === 0) {
-                container.innerHTML = '<span style="color:#888;">没有有效的名单输入</span>';
+                container.innerHTML = '<span style="color:#888; grid-column: span 5;">没有有效的名单输入</span>';
                 return;
             }
 
@@ -233,7 +236,7 @@
             }
         }
 
-        // 渲染 24 小时历史记录并过滤过期项
+        // 渲染 24 小时历史记录（包括参抽名单与中奖名单）
         function renderHistory(historyArr) {
             const historyListDiv = document.getElementById('historyList');
             const nowTimestamp = Date.now();
@@ -249,7 +252,8 @@
             historyListDiv.innerHTML = filteredHistory.map(item => `
                 <div class="history-item">
                     <div class="history-time">⏱️ 抽奖时间：${item.timeStr} | 🎯 主题：<b>${item.title || '幸运大抽奖'}</b></div>
-                    <div>🎉 中奖名单：<strong>${item.winners.join('、')}</strong></div>
+                    <div class="history-detail">👥 参抽名单（共 ${item.participants ? item.participants.length : 0} 人）：<span style="color:#555;">${item.participants ? item.participants.join('、') : '未知'}</span></div>
+                    <div class="history-detail">🎉 中奖名单：<strong style="color:#28a745;">${item.winners.join('、')}</strong></div>
                 </div>
             `).join('');
         }
@@ -285,7 +289,7 @@
             resultDiv.innerHTML = `<strong>🎉 【${title}】 中奖名单（共 ${count} 人）：</strong><br><br>` + 
                 winners.map((w, index) => `<b>第 ${index + 1} 名：</b> ${w}`).join('<br>');
 
-            // 追加到历史记录并推送到云端
+            // 追加到历史记录（记录参抽名单 + 中奖名单）并推送到云端
             const nowTimestamp = Date.now();
             const timeString = new Date().toLocaleString('zh-CN', { hour12: false });
             
@@ -293,6 +297,7 @@
                 timestamp: nowTimestamp,
                 timeStr: timeString,
                 title: title,
+                participants: Array.from(checkboxes).map(cb => cb.value), // 记录选中的参抽名单
                 winners: winners
             };
 
